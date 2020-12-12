@@ -21,7 +21,7 @@ volatile uint16_t time;
 uint16_t ctx;
 uint16_t seed;
 //uint8_t maxLvl = 0;
-volatile uint8_t nrot = 8;
+//volatile uint8_t nrot = 8;
 uint8_t lastKey;
 uint8_t lvl = 0;
 
@@ -59,7 +59,14 @@ void gameOver() {
   for (uint8_t i = 0; i < 4; i++) {
     play(3 - i, 25000);
   }
+  if(lvl > 2) {
+    data.lastLevel = lvl;
+    data.lastSeed = seed;
+  }
+  
   if (lvl > data.hsLevel) {
+    data.hsLevel = lvl;
+    data.hsSeed = seed;
 //    eeprom_write_byte((uint8_t*) 0, ~lvl); // write best score
 //    eeprom_write_byte((uint8_t*) 1, (seed >> 8)); // write high byte of seed
 //    eeprom_write_byte((uint8_t*) 2, (seed & 0b11111111)); // write low byte of seed
@@ -80,10 +87,10 @@ void levelUp() {
 
 ISR(WDT_vect) {
   time++; // increase each 16 ms
-  if (nrot) { // random seed generation
-    nrot--;
-    seed = (seed << 1) ^ TCNT0;
-  }
+//  if (nrot) { // random seed generation
+//    nrot--;
+//    seed = (seed << 1) ^ TCNT0;
+//  }
 }
 
 int main() {
@@ -91,20 +98,19 @@ int main() {
 
   eeprom_read_block((void*)&data,0,sizeof(data));
 
-//
-//  ADCSRA |= (1 << ADEN); // enable ADC
-//  ADCSRA |= (1 << ADSC); // start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
-//  // ADCSRA = (1 << ADEN) | (1 << ADSC); // enable ADC and start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
-//  while (ADCSRA & (1 << ADSC)); // ADSC is cleared when the conversion finishes
-//  seed = ADCL; // set seed to lower ADC byte
-//  ADCSRA = 0b00000000; // turn off ADC
+  ADCSRA |= (1 << ADEN); // enable ADC
+  ADCSRA |= (1 << ADSC); // start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
+  // ADCSRA = (1 << ADEN) | (1 << ADSC); // enable ADC and start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
+  while (ADCSRA & (1 << ADSC)); // ADSC is cleared when the conversion finishes
+  seed = (ADCL << 8) ^ data.lastSeed; // set seed to lower ADC byte
+  ADCSRA = 0b00000000; // turn off ADC
 
 
   WDTCR = (1 << WDTIE); // start watchdog timer with 16ms prescaller (interrupt mode)
   sei(); // global interrupt enable
   TCCR0B = (1 << CS00); // Timer0 in normal mode (no prescaler)
   
-  while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
+//  while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
 //  eeprom_write_byte((uint8_t*) 3, (seed >> 8)); // write high byte of seed
 //  eeprom_write_byte((uint8_t*) 4, (seed & 0b11111111)); // write low byte of seed
   
