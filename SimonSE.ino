@@ -2,6 +2,12 @@
 #include <util/delay_basic.h>
 #include <avr/eeprom.h>
 
+struct DATA {
+  uint8_t hsLevel;
+  uint16_t hsSeed;
+  uint8_t lastLevel;
+  uint16_t lastSeed;
+} data;
 
 
 const uint8_t buttons[4] = {
@@ -14,7 +20,7 @@ const uint8_t tones[4] = {
 volatile uint16_t time;
 uint16_t ctx;
 uint16_t seed;
-uint8_t maxLvl = 0;
+//uint8_t maxLvl = 0;
 volatile uint8_t nrot = 8;
 uint8_t lastKey;
 uint8_t lvl = 0;
@@ -53,15 +59,16 @@ void gameOver() {
   for (uint8_t i = 0; i < 4; i++) {
     play(3 - i, 25000);
   }
-  if (lvl > maxLvl) {
-    eeprom_write_byte((uint8_t*) 0, ~lvl); // write best score
-    eeprom_write_byte((uint8_t*) 1, (seed >> 8)); // write high byte of seed
-    eeprom_write_byte((uint8_t*) 2, (seed & 0b11111111)); // write low byte of seed
+  if (lvl > data.hsLevel) {
+//    eeprom_write_byte((uint8_t*) 0, ~lvl); // write best score
+//    eeprom_write_byte((uint8_t*) 1, (seed >> 8)); // write high byte of seed
+//    eeprom_write_byte((uint8_t*) 2, (seed & 0b11111111)); // write low byte of seed
     //eeprom_write_word((uint16_t*) 1, seed); // write seed
     for (uint8_t i = 0; i < 3; i++) { // play best score melody
       levelUp();
     }
   }
+  eeprom_write_block((void*)&data,0,sizeof(data));
   sleepNow();
 }
 
@@ -81,6 +88,9 @@ ISR(WDT_vect) {
 
 int main() {
   PORTB = 0b00011101; // enable pull-up resistors on 4 game buttons
+
+  eeprom_read_block((void*)&data,0,sizeof(data));
+
 //
 //  ADCSRA |= (1 << ADEN); // enable ADC
 //  ADCSRA |= (1 << ADSC); // start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
@@ -89,34 +99,34 @@ int main() {
 //  seed = ADCL; // set seed to lower ADC byte
 //  ADCSRA = 0b00000000; // turn off ADC
 
-  seed = (((uint16_t) eeprom_read_byte((uint8_t*) 3)) << 8) | eeprom_read_byte((uint8_t*) 4); 
 
   WDTCR = (1 << WDTIE); // start watchdog timer with 16ms prescaller (interrupt mode)
   sei(); // global interrupt enable
   TCCR0B = (1 << CS00); // Timer0 in normal mode (no prescaler)
   
   while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
-  eeprom_write_byte((uint8_t*) 3, (seed >> 8)); // write high byte of seed
-  eeprom_write_byte((uint8_t*) 4, (seed & 0b11111111)); // write low byte of seed
+//  eeprom_write_byte((uint8_t*) 3, (seed >> 8)); // write high byte of seed
+//  eeprom_write_byte((uint8_t*) 4, (seed & 0b11111111)); // write low byte of seed
   
 
   TCCR0A = (1 << COM0B1) | (0 << COM0B0) | (0 << WGM01)  | (1 << WGM00); // set Timer0 to phase correct PWM
 
 
-  maxLvl = ~eeprom_read_byte((uint8_t*) 0); // read best score from eeprom
+//  maxLvl = ~eeprom_read_byte((uint8_t*) 0); // read best score from eeprom
 
   switch (PINB & 0b00011101) {
     case 0b00010101: // red button is pressed during reset
-      eeprom_write_byte((uint8_t*) 0, 255); // reset best score
-      maxLvl = 0;
+//      eeprom_write_byte((uint8_t*) 0, 255); // reset best score
+      data.hsLevel = 0;
       break;
     case 0b00001101: // green button is pressed during reset
       lvl = 255; // play random tones in an infinite loop
       break;
     case 0b00011001: // orange button is pressed during reset
-      lvl = maxLvl; // start from max level and load seed from eeprom (no break here)
+      lvl = data.hsLevel; // start from max level and load seed from eeprom (no break here)
     case 0b00011100: // yellow button is pressed during reset
-      seed = (((uint16_t) eeprom_read_byte((uint8_t*) 1)) << 8) | eeprom_read_byte((uint8_t*) 2);  // load seed from eeprom but start from first level
+      seed = data.hsSeed;
+//      seed = (((uint16_t) eeprom_read_byte((uint8_t*) 1)) << 8) | eeprom_read_byte((uint8_t*) 2);  // load seed from eeprom but start from first level
       break;
   }
 
