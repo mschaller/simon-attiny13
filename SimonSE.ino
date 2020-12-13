@@ -1,5 +1,4 @@
 #include <avr/sleep.h>
-//#include <util/delay_basic.h>
 #include <avr/eeprom.h>
 
 #define WDTD(t) (uint8_t)(t/16)
@@ -11,10 +10,10 @@ struct DATA {
   uint16_t lastSeed;
 } data;
 
-
 const uint8_t buttons[4] = {
   0b00001010, 0b00000110, 0b00000011, 0b00010010
 };
+
 const uint8_t tones[4] = {
   239, 179, 143, 119
 };
@@ -22,7 +21,6 @@ const uint8_t tones[4] = {
 volatile uint16_t time;
 uint16_t ctx;
 uint16_t seed;
-//uint8_t maxLvl = 0;
 volatile uint8_t nrot = 8;
 uint8_t lastKey;
 uint8_t lvl = 0;
@@ -55,11 +53,12 @@ void play(uint8_t i, uint8_t t = WDTD(150)) {
   PORTB = 0b00011101;
 }
 
-
 void gameOver() {
   for (uint8_t i = 0; i < 4; i++) {
     play(3 - i, WDTD(83)); // 83.3ms
   }
+  
+  // safe current game only at level 3 and above
   if(lvl > 2) {
     data.lastLevel = lvl;
     data.lastSeed = seed;
@@ -68,10 +67,6 @@ void gameOver() {
   if (lvl > data.hsLevel) {
     data.hsLevel = lvl;
     data.hsSeed = seed;
-//    eeprom_write_byte((uint8_t*) 0, ~lvl); // write best score
-//    eeprom_write_byte((uint8_t*) 1, (seed >> 8)); // write high byte of seed
-//    eeprom_write_byte((uint8_t*) 2, (seed & 0b11111111)); // write low byte of seed
-    //eeprom_write_word((uint16_t*) 1, seed); // write seed
     for (uint8_t i = 0; i < 3; i++) { // play best score melody
       levelUp();
     }
@@ -93,9 +88,11 @@ ISR(WDT_vect) {
   }
 }
 
-void delay_wdt(uint8_t t)                        {  // Delay using 16ms Base Time
+void delay_wdt(uint8_t t) {  
+  // Delay using 16ms Base Time
+  // max delay 255 * 16ms = 4,08s
   time = 0;
-  while (time <= t);                                // max delay 255 * 16ms = 4,08s
+  while (time <= t);                                
 }
 
 int main() {
@@ -105,29 +102,21 @@ int main() {
 
   ADCSRA |= (1 << ADEN); // enable ADC
   ADCSRA |= (1 << ADSC); // start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
-  // ADCSRA = (1 << ADEN) | (1 << ADSC); // enable ADC and start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
   while (ADCSRA & (1 << ADSC)); // ADSC is cleared when the conversion finishes
   seed = ADCL; // set seed to lower ADC byte
   ADCSRA = 0b00000000; // turn off ADC
-
 
   WDTCR = (1 << WDTIE); // start watchdog timer with 16ms prescaller (interrupt mode)
   sei(); // global interrupt enable
   TCCR0B = (1 << CS00); // Timer0 in normal mode (no prescaler)
   
   while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
-//  eeprom_write_byte((uint8_t*) 3, (seed >> 8)); // write high byte of seed
-//  eeprom_write_byte((uint8_t*) 4, (seed & 0b11111111)); // write low byte of seed
-  
 
   TCCR0A = (1 << COM0B1) | (0 << COM0B0) | (0 << WGM01)  | (1 << WGM00); // set Timer0 to phase correct PWM
 
-
-//  maxLvl = ~eeprom_read_byte((uint8_t*) 0); // read best score from eeprom
-
   switch (PINB & 0b00011101) {
     case 0b00010101: // red button is pressed during reset
-      lvl = data.lastLevel;
+      lvl = data.lastLevel; // retry last game
       seed = data.lastSeed;
       break;
     case 0b00001101: // green button is pressed during reset
@@ -137,16 +126,13 @@ int main() {
       lvl = data.hsLevel; // start from max level and load seed from eeprom (no break here)
     case 0b00011100: // yellow button is pressed during reset
       seed = data.hsSeed;
-//      seed = (((uint16_t) eeprom_read_byte((uint8_t*) 1)) << 8) | eeprom_read_byte((uint8_t*) 2);  // load seed from eeprom but start from first level
       break;
   }
-
-
 
   while(1) {
     ctx = seed;
     for (uint8_t cnt = 0; cnt <= lvl; cnt++) { // never ends if lvl == 255
-      delay_wdt(WDTD(218)); // _delay_loop_2(4400 + 489088 / (8 + lvl));
+      delay_wdt(WDTD(218)); // todo: _delay_loop_2(4400 + 489088 / (8 + lvl));
       play(simple_random4());
     }
     time = 0;
@@ -163,10 +149,10 @@ int main() {
               uint8_t correct = simple_random4();
               if (i != correct) {
                 for (uint8_t j = 0; j < 3; j++) {
-                  delay_wdt(WDTD(33)); // _delay_loop_2(10000); // 33.33 ms
+                  delay_wdt(WDTD(33)); // 33.33 ms
                   play(correct, WDTD(66)); // 66.66ms
                 }
-                delay_wdt(WDTD(218)); // _delay_loop_2(65536); // 218.5 ms
+                delay_wdt(WDTD(218)); // 218.5 ms
                 gameOver();
               }
               time = 0;
@@ -181,12 +167,12 @@ int main() {
         }
       } // while(!pressed)
     } // for cnt <= lvl
-    delay_wdt(WDTD(218)); // _delay_loop_2(65536); // 218.5 ms
+    delay_wdt(WDTD(218)); // 218.5 ms
     
     if (lvl < 254) {
       lvl++;
       levelUp(); // animation for completed level
-      delay_wdt(WDTD(150)); // _delay_loop_2(45000); // 150 ms
+      delay_wdt(WDTD(150)); // 150 ms
     }
     else { // special animation for highest allowable (255th) level
       levelUp();
