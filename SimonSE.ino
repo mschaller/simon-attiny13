@@ -163,7 +163,7 @@ int main() {
             time = 0;
           }
         }
-        if (time > 4000) { // ~ 64 seconds
+        if (time > 250) { // ~ 4 seconds
           gameOver();
         }
       } // while(!pressed)
