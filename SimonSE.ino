@@ -1,6 +1,8 @@
 #include <avr/sleep.h>
-#include <util/delay_basic.h>
+//#include <util/delay_basic.h>
 #include <avr/eeprom.h>
+
+#define WDTD(t) (uint8_t)(t/16)
 
 struct DATA {
   uint8_t hsLevel;
@@ -26,7 +28,6 @@ uint8_t lastKey;
 uint8_t lvl = 0;
 
 uint8_t simple_random4() {
-  // ctx = ctx * 1103515245 + 12345; // too big for ATtiny13
   ctx = 2053 * ctx + 13849;
   uint8_t temp = ctx ^ (ctx >> 8); // XOR two bytes
   temp ^= (temp >> 4); // XOR two nibbles
@@ -42,13 +43,13 @@ void sleepNow() {
   sleep_cpu();
 }
 
-void play(uint8_t i, uint16_t t = 45000) {
+void play(uint8_t i, uint8_t t = WDTD(150)) {
   PORTB = 0b00000000;  // set all button pins low or disable pull-up resistors
   DDRB = buttons[i]; // set speaker and #i button pin as output
   OCR0A = tones[i];
   OCR0B = tones[i] >> 1;
   TCCR0B = (1 << WGM02) | (1 << CS01); // prescaler /8
-  _delay_loop_2(t);
+  delay_wdt(t);
   TCCR0B = 0b00000000; // no clock source (Timer0 stopped)
   DDRB = 0b00000000;
   PORTB = 0b00011101;
@@ -57,7 +58,7 @@ void play(uint8_t i, uint16_t t = 45000) {
 
 void gameOver() {
   for (uint8_t i = 0; i < 4; i++) {
-    play(3 - i, 25000);
+    play(3 - i, WDTD(83)); // 83.3ms
   }
   if(lvl > 2) {
     data.lastLevel = lvl;
@@ -81,7 +82,7 @@ void gameOver() {
 
 void levelUp() {
   for (uint8_t i = 0; i < 4; i++) {
-    play(i, 25000);
+    play(i, WDTD(83)); // 83.3ms
   }
 }
 
@@ -93,6 +94,11 @@ ISR(WDT_vect) {
 //  }
 }
 
+void delay_wdt(uint8_t t)                        {  // Delay using 16ms Base Time
+  time = 0;
+  while (time <= t);                                // max delay 255 * 16ms = 4,08s
+}
+
 int main() {
   PORTB = 0b00011101; // enable pull-up resistors on 4 game buttons
 
@@ -102,7 +108,7 @@ int main() {
   ADCSRA |= (1 << ADSC); // start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
   // ADCSRA = (1 << ADEN) | (1 << ADSC); // enable ADC and start the conversion on unconnected ADC0 (ADMUX = 0b00000000 by default)
   while (ADCSRA & (1 << ADSC)); // ADSC is cleared when the conversion finishes
-  seed = (ADCL << 8) ^ data.lastSeed; // set seed to lower ADC byte
+  seed = ADCL; // set seed to lower ADC byte
   ADCSRA = 0b00000000; // turn off ADC
 
 
@@ -122,8 +128,8 @@ int main() {
 
   switch (PINB & 0b00011101) {
     case 0b00010101: // red button is pressed during reset
-//      eeprom_write_byte((uint8_t*) 0, 255); // reset best score
-      data.hsLevel = 0;
+      lvl = data.lastLevel;
+      seed = data.lastSeed;
       break;
     case 0b00001101: // green button is pressed during reset
       lvl = 255; // play random tones in an infinite loop
@@ -141,7 +147,7 @@ int main() {
   while(1) {
     ctx = seed;
     for (uint8_t cnt = 0; cnt <= lvl; cnt++) { // never ends if lvl == 255
-      _delay_loop_2(4400 + 489088 / (8 + lvl));
+      delay_wdt(WDTD(218)); // _delay_loop_2(4400 + 489088 / (8 + lvl));
       play(simple_random4());
     }
     time = 0;
@@ -158,10 +164,10 @@ int main() {
               uint8_t correct = simple_random4();
               if (i != correct) {
                 for (uint8_t j = 0; j < 3; j++) {
-                  _delay_loop_2(10000);
-                  play(correct, 20000);
+                  delay_wdt(WDTD(33)); // _delay_loop_2(10000); // 33.33 ms
+                  play(correct, WDTD(66)); // 66.66ms
                 }
-                _delay_loop_2(65536);
+                delay_wdt(WDTD(218)); // _delay_loop_2(65536); // 218.5 ms
                 gameOver();
               }
               time = 0;
@@ -171,24 +177,21 @@ int main() {
             time = 0;
           }
         }
-        if (time > 4000) {
+        if (time > 4000) { // ~ 64 seconds
           gameOver();
         }
       } // while(!pressed)
     } // for cnt <= lvl
-    _delay_loop_2(65536);
+    delay_wdt(WDTD(218)); // _delay_loop_2(65536); // 218.5 ms
     
     if (lvl < 254) {
       lvl++;
       levelUp(); // animation for completed level
-      _delay_loop_2(45000);
+      delay_wdt(WDTD(150)); // _delay_loop_2(45000); // 150 ms
     }
     else { // special animation for highest allowable (255th) level
       levelUp();
       gameOver(); // then turn off
     }
   } // while(1)
-  
-
-  sleepNow();
 }
