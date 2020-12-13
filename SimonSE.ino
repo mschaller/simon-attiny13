@@ -83,7 +83,8 @@ void levelUp() {
 
 ISR(WDT_vect) {
   time++; // increase each 16 ms
-  if (nrot--) { // random seed generation
+  if (nrot) { // random seed generation
+    nrot--;
     seed = (seed << 1) ^ TCNT0;
   }
 }
