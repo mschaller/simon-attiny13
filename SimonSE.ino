@@ -23,7 +23,7 @@ volatile uint16_t time;
 uint16_t ctx;
 uint16_t seed;
 //uint8_t maxLvl = 0;
-//volatile uint8_t nrot = 8;
+volatile uint8_t nrot = 8;
 uint8_t lastKey;
 uint8_t lvl = 0;
 
@@ -88,10 +88,10 @@ void levelUp() {
 
 ISR(WDT_vect) {
   time++; // increase each 16 ms
-//  if (nrot) { // random seed generation
-//    nrot--;
-//    seed = (seed << 1) ^ TCNT0;
-//  }
+  if (nrot) { // random seed generation
+    nrot--;
+    seed = (seed << 1) ^ TCNT0;
+  }
 }
 
 void delay_wdt(uint8_t t)                        {  // Delay using 16ms Base Time
@@ -116,7 +116,7 @@ int main() {
   sei(); // global interrupt enable
   TCCR0B = (1 << CS00); // Timer0 in normal mode (no prescaler)
   
-//  while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
+  while (nrot); // repeat for fist 8 WDT interrupts to shuffle the seed
 //  eeprom_write_byte((uint8_t*) 3, (seed >> 8)); // write high byte of seed
 //  eeprom_write_byte((uint8_t*) 4, (seed & 0b11111111)); // write low byte of seed
   
