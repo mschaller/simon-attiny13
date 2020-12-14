@@ -135,6 +135,8 @@ int main() {
       break;
   }
 
+  while ((PINB & 0b00011101) != 0b00011101) {};     // Wait to button release
+
   while(1) {
     ctx = seed;
     for (uint8_t cnt = 0; cnt <= lvl; cnt++) { // never ends if lvl == 255
